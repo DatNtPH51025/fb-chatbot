@@ -8,13 +8,23 @@ app.use(bodyParser.json());
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
+// Root route
+app.get("/", (req, res) => {
+  res.send("Bot is running 🚀");
+});
+
+// Health check
+app.get("/healthz", (req, res) => {
+  res.status(200).send("OK");
+});
+
 // Endpoint xác minh webhook
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode && token === VERIFY_TOKEN) {
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("Webhook verified!");
     res.status(200).send(challenge);
   } else {
@@ -29,7 +39,7 @@ app.post("/webhook", (req, res) => {
   if (body.object === "page") {
     body.entry.forEach(entry => {
       const event = entry.messaging[0];
-      if (event.message && event.message.text) {
+      if (event?.message?.text) {
         const senderId = event.sender.id;
         const receivedText = event.message.text;
 
@@ -49,18 +59,24 @@ app.post("/webhook", (req, res) => {
 const sendMessage = async (recipientId, text) => {
   const fetch = (await import("node-fetch")).default;
 
-  await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      recipient: { id: recipientId },
-      message: { text }
-    })
-  }).then(res => res.json())
-    .then(json => console.log("Sent:", json))
-    .catch(err => console.error("Error:", err));
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipient: { id: recipientId },
+        message: { text }
+      })
+    });
+
+    const json = await res.json();
+    console.log("Sent:", json);
+  } catch (err) {
+    console.error("Error sending message:", err);
+  }
 };
 
-app.listen(process.env.PORT, () => {
-  console.log(`App is running on port ${process.env.PORT}`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`App is running on port ${PORT}`);
 });
