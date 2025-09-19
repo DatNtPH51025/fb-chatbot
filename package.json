@@ -19,7 +19,8 @@
     "google-auth-library": "^10.3.0",
     "google-spreadsheet": "^5.0.2",
     "googleapis": "^160.0.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "string-similarity": "^4.0.4"
   },
   "engines": {
     "node": ">=18"

@@ -3,7 +3,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
 const cors = require("cors");
-
+const stringSimilarity = require("string-similarity")
 const { getSheetData, appendSheetData } = require("./googleSheets");
 const { callGeminiWithSheet } = require("./aiService");
 
@@ -24,19 +24,39 @@ const SHEET_NAME = process.env.SHEET_NAME;
 
 // ======= Hàm xử lý chat chung =======
 async function handleChat(userMessage, senderId = "web") {
-  const values = await getSheetData(SHEET_ID, SHEET_NAME);
+  const faqData = await getSheetData(SHEET_ID, SHEET_NAME);
+  const learnedData = await getSheetData(SHEET_ID, "LearnedFAQ");
+
   let reply = "Xin lỗi, tôi không hiểu.";
   let type = "AI";
 
-  // Tìm trong FAQ (exact match)
-  const found = values?.find(row => row[0]?.toLowerCase() === userMessage.toLowerCase());
-  if (found) {
-    reply = found[1];
-    type = "FAQ";
-  } else {
-    // Lọc dữ liệu liên quan để prompt ngắn hơn (keyword match)
-    const relevantRows = values?.filter(row => userMessage.toLowerCase().includes(row[0]?.toLowerCase())) || [];
-    reply = await callGeminiWithSheet(userMessage, relevantRows.length ? relevantRows : values || []);
+  // 1️⃣ Kiểm tra LearnedFAQ
+  if (learnedData?.length) {
+    const learnedQuestions = learnedData.map(row => row[0]);
+    const bestLearned = stringSimilarity.findBestMatch(userMessage, learnedQuestions);
+    if (bestLearned.bestMatch.rating > 0.5) {
+      reply = learnedData[learnedQuestions.indexOf(bestLearned.bestMatch.target)][1];
+      type = "LearnedFAQ";
+    }
+  }
+
+  // 2️⃣ Kiểm tra FAQ
+  if (reply === "Xin lỗi, tôi không hiểu." && faqData?.length) {
+    const faqQuestions = faqData.map(row => row[0]);
+    const bestFAQ = stringSimilarity.findBestMatch(userMessage, faqQuestions);
+    if (bestFAQ.bestMatch.rating > 0.5) {
+      reply = faqData[faqQuestions.indexOf(bestFAQ.bestMatch.target)][1];
+      type = "FAQ";
+    }
+  }
+
+  // 3️⃣ Gọi AI nếu chưa tìm được
+  if (reply === "Xin lỗi, tôi không hiểu.") {
+    reply = await callGeminiWithSheet(userMessage, faqData || []);
+    type = "AI";
+
+    // Lưu vào LearnedFAQ
+    await appendSheetData(SHEET_ID, "LearnedFAQ", [userMessage, reply]);
   }
 
   // Lưu lịch sử chat
