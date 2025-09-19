@@ -1,5 +1,4 @@
 const { google } = require("googleapis");
-const axios = require("axios");
 
 // ✅ Lấy dữ liệu key–value từ sheet
 async function getSheetData(sheetId, sheetName) {
@@ -10,16 +9,16 @@ async function getSheetData(sheetId, sheetName) {
         });
 
         const sheets = google.sheets({ version: "v4", auth });
-
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,
             range: `${sheetName}!A:B`,
         });
 
-        return response.data.values;
+        // Trả về mảng rỗng nếu sheet chưa có dữ liệu
+        return response.data.values || [];
     } catch (err) {
         console.error("❌ Lỗi đọc Google Sheets:", err);
-        return null;
+        return []; // tránh crash nếu sheet chưa tồn tại dữ liệu
     }
 }
 
