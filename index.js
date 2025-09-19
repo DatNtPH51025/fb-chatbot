@@ -26,44 +26,62 @@ app.get("/webhook", (req, res) => {
 
 // Xử lý tin nhắn từ FB
 app.post("/webhook", async (req, res) => {
-  const body = req.body;
+  try {
+    if (req.body.object === "page") {
+      for (const entry of req.body.entry) {
+        for (const event of entry.messaging) {
+          // Bỏ qua echo message do chính Page gửi
+          if (event.message?.is_echo) {
+            console.log("👉 Bỏ qua echo từ page");
+            continue;
+          }
 
-  if (body.object === "page") {
-    for (const entry of body.entry) {
-      for (const event of entry.messaging) {
-        if (event.message && event.message.text) {
-          const senderId = event.sender.id;
-          const userMessage = event.message.text;
+          if (event.message?.text) {
+            const senderId = event.sender.id;
+            const userMessage = event.message.text;
 
-          // Gọi Gemini API
-          const geminiRes = await fetch(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: userMessage }] }]
-              })
-            }
-          );
-          const data = await geminiRes.json();
-          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Xin lỗi, tôi không hiểu.";
+            console.log("📩 USER_MESSAGE:", userMessage);
 
-          // Gửi trả lời về Messenger
-          await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              recipient: { id: senderId },
-              message: { text: reply }
-            })
-          });
+            // Gọi Gemini API
+            const geminiRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: userMessage }] }]
+                })
+              }
+            );
+            const data = await geminiRes.json();
+            const reply =
+              data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+              "Xin lỗi, tôi không hiểu.";
+
+            console.log("🤖 BOT_REPLY:", reply);
+
+            // Gửi trả lời về Messenger
+            await fetch(
+              `https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  recipient: { id: senderId },
+                  message: { text: reply }
+                })
+              }
+            );
+          }
         }
       }
+      res.sendStatus(200); // trả về OK ngay để tránh retry
+    } else {
+      res.sendStatus(404);
     }
-    res.sendStatus(200);
-  } else {
-    res.sendStatus(404);
+  } catch (err) {
+    console.error("❌ Lỗi webhook:", err);
+    res.sendStatus(500);
   }
 });
 
