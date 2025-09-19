@@ -19,48 +19,57 @@ app.use(cors({
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const SHEET_ID = process.env.SHEET_ID;
-const SHEET_NAME = process.env.SHEET_NAME;
 
-// ======= Hàm xử lý chat chung =======
+
 async function handleChat(userMessage, senderId = "web") {
-  const faqData = await getSheetData(SHEET_ID, SHEET_NAME);
-  const learnedData = await getSheetData(SHEET_ID, "LearnedFAQ");
+  userMessage = (userMessage || "").trim();
+  if (!userMessage) return "Xin lỗi, tôi không hiểu.";
+
+  // 1️⃣ Lấy dữ liệu từ các sheet
+  const learnedData = await getSheetData(process.env.SHEET_ID, "LearnedFAQ") || [];
+  const faqData = await getSheetData(process.env.SHEET_ID, process.env.SHEET_NAME) || [];
 
   let reply = "Xin lỗi, tôi không hiểu.";
   let type = "AI";
 
-  // 1️⃣ Kiểm tra LearnedFAQ
-  if (learnedData?.length) {
-    const learnedQuestions = learnedData.map(row => row[0]);
-    const bestLearned = stringSimilarity.findBestMatch(userMessage, learnedQuestions);
-    if (bestLearned.bestMatch.rating > 0.5) {
-      reply = learnedData[learnedQuestions.indexOf(bestLearned.bestMatch.target)][1];
+  // 2️⃣ Tìm trong LearnedFAQ
+  if (learnedData.length) {
+    const questions = learnedData.map(row => row[0] || "");
+    const best = stringSimilarity.findBestMatch(userMessage, questions);
+    if (best.bestMatch.rating > 0.5) {
+      const index = questions.indexOf(best.bestMatch.target);
+      reply = (learnedData[index][1] || reply).toString();
       type = "LearnedFAQ";
     }
   }
 
-  // 2️⃣ Kiểm tra FAQ
-  if (reply === "Xin lỗi, tôi không hiểu." && faqData?.length) {
-    const faqQuestions = faqData.map(row => row[0]);
-    const bestFAQ = stringSimilarity.findBestMatch(userMessage, faqQuestions);
-    if (bestFAQ.bestMatch.rating > 0.5) {
-      reply = faqData[faqQuestions.indexOf(bestFAQ.bestMatch.target)][1];
+  // 3️⃣ Tìm trong FAQ
+  if (reply === "Xin lỗi, tôi không hiểu." && faqData.length) {
+    const questions = faqData.map(row => row[0] || "");
+    const best = stringSimilarity.findBestMatch(userMessage, questions);
+    if (best.bestMatch.rating > 0.5) {
+      const index = questions.indexOf(best.bestMatch.target);
+      reply = (faqData[index][1] || reply).toString();
       type = "FAQ";
     }
   }
 
-  // 3️⃣ Gọi AI nếu chưa tìm được
+  // 4️⃣ Gọi AI nếu chưa tìm thấy
   if (reply === "Xin lỗi, tôi không hiểu.") {
-    reply = await callGeminiWithSheet(userMessage, faqData || []);
+    reply = await callGeminiWithSheet(userMessage, faqData.length ? faqData : []);
+    reply = (reply || "Xin lỗi, tôi không hiểu.").toString();
     type = "AI";
 
-    // Lưu vào LearnedFAQ
-    await appendSheetData(SHEET_ID, "LearnedFAQ", [userMessage, reply]);
+    // 5️⃣ Lưu vào LearnedFAQ nếu chưa tồn tại câu hỏi tương tự
+    const learnedQuestions = learnedData.map(row => row[0] || "");
+    const best = stringSimilarity.findBestMatch(userMessage, learnedQuestions);
+    if (best.bestMatch.rating < 0.6) {
+      await appendSheetData(process.env.SHEET_ID, "LearnedFAQ", [userMessage, reply]);
+    }
   }
 
-  // Lưu lịch sử chat
-  await appendSheetData(SHEET_ID, "ChatHistory", [
+  // 6️⃣ Lưu lịch sử chat
+  await appendSheetData(process.env.SHEET_ID, "ChatHistory", [
     new Date().toISOString(),
     senderId,
     userMessage,
@@ -70,7 +79,6 @@ async function handleChat(userMessage, senderId = "web") {
 
   return reply;
 }
-
 // ======= Webhook xác minh Facebook =======
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
