@@ -1,6 +1,4 @@
 const axios = require("axios");
-const stringSimilarity = require("string-similarity");
-const { getSheetData, appendSheetData } = require("./googleSheets");
 
 // Hàm gọi Gemini AI
 async function callGemini(prompt) {
@@ -10,61 +8,37 @@ async function callGemini(prompt) {
             { contents: [{ parts: [{ text: prompt }] }] }
         );
 
-        return res.data.candidates?.[0]?.content?.parts?.[0]?.text || "Xin lỗi, tôi không hiểu.";
+        const aiReply = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        return (aiReply || "Xin lỗi, tôi không có thông tin về điều này.").toString();
     } catch (err) {
         console.error("⚠️ Lỗi AI:", err.response?.data || err.message);
-        return "Xin lỗi, tôi không hiểu.";
+        return "Xin lỗi, tôi không có thông tin về điều này.";
     }
 }
 
-// Hàm gọi Gemini với dữ liệu FAQ và LearnedFAQ
-async function callGeminiWithSheet(userMessage, faqData, learnedData, sheetId) {
-    // 1️⃣ Kiểm tra LearnedFAQ trước (học từ câu hỏi trước đó)
-    if (learnedData?.length) {
-        const learnedQuestions = learnedData.map(row => row[0]);
-        const bestMatch = stringSimilarity.findBestMatch(userMessage, learnedQuestions);
-        if (bestMatch.bestMatch.rating > 0.5) {
-            const idx = learnedQuestions.indexOf(bestMatch.bestMatch.target);
-            return learnedData[idx][1]; // trả lời ngay từ LearnedFAQ
-        }
-    }
+// Hàm gọi AI dựa trên dữ liệu từ Google Sheets + LearnedFAQ
+async function callGeminiWithSheet(userMessage, sheetData = []) {
+    // Tạo knowledge base từ dữ liệu
+    const context = sheetData
+        .map(row => `${row[0] || ""}: ${row[1] || ""}`)
+        .join("\n");
 
-    // 2️⃣ Kiểm tra FAQ gốc
-    if (faqData?.length) {
-        const faqQuestions = faqData.map(row => row[0]);
-        const bestMatch = stringSimilarity.findBestMatch(userMessage, faqQuestions);
-        if (bestMatch.bestMatch.rating > 0.5) {
-            const idx = faqQuestions.indexOf(bestMatch.bestMatch.target);
-            return faqData[idx][1]; // trả lời ngay từ FAQ
-        }
-    }
-
-    // 3️⃣ Nếu không match, gọi AI
-    const faqText = faqData.map(row => `${row[0]}: ${row[1]}`).join("\n");
     const prompt = `
-Bạn là nhân viên tư vấn bán hàng. 
-Dưới đây là dữ liệu từ Google Sheets:
+Bạn là một nhân viên tư vấn chuyên nghiệp của ứng dụng. 
+Hãy trả lời tự nhiên, lịch sự, thân thiện, giống nhân viên tư vấn thực thụ.
+Bạn có thể dựa vào dữ liệu dưới đây từ Google Sheets và các câu hỏi đã học:
 
-${faqText}
+${context}
 
-Người dùng hỏi: "${userMessage}"
+Người dùng hỏi: "${userMessage || ""}"
 
-👉 Trả lời tự nhiên, lịch sự, chỉ dựa trên dữ liệu trong Google Sheets.
-Nếu không tìm thấy thông tin, hãy nói "Xin lỗi, hiện tại tôi chưa có thông tin này".
+👉 Nhiệm vụ:  
+- Trả lời rõ ràng, chi tiết, thân thiện như nhân viên tư vấn.  
+- Nếu không có thông tin trong dữ liệu, hãy nói: "Xin lỗi, hiện tại tôi chưa có thông tin này".  
+- Không bịa câu trả lời, chỉ dựa vào dữ liệu có sẵn.
 `;
 
-    const reply = await callGemini(prompt);
-
-    // 4️⃣ Lưu câu hỏi + câu trả lời mới vào LearnedFAQ
-    if (sheetId) {
-        try {
-            await appendSheetData(sheetId, "LearnedFAQ", [userMessage, reply]);
-        } catch (err) {
-            console.error("❌ Lỗi lưu LearnedFAQ:", err.message);
-        }
-    }
-
-    return reply;
+    return await callGemini(prompt);
 }
 
 module.exports = { callGemini, callGeminiWithSheet };

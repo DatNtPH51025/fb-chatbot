@@ -20,19 +20,18 @@ app.use(cors({
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-
 async function handleChat(userMessage, senderId = "web") {
   userMessage = (userMessage || "").trim();
   if (!userMessage) return "Xin lỗi, tôi không hiểu.";
 
-  // 1️⃣ Lấy dữ liệu từ các sheet
+  // Lấy dữ liệu từ các sheet
   const learnedData = await getSheetData(process.env.SHEET_ID, "LearnedFAQ") || [];
   const faqData = await getSheetData(process.env.SHEET_ID, process.env.SHEET_NAME) || [];
 
   let reply = "Xin lỗi, tôi không hiểu.";
   let type = "AI";
 
-  // 2️⃣ Tìm trong LearnedFAQ
+  // 1️⃣ Tìm trong LearnedFAQ
   if (learnedData.length) {
     const questions = learnedData.map(row => row[0] || "");
     const best = stringSimilarity.findBestMatch(userMessage, questions);
@@ -43,7 +42,7 @@ async function handleChat(userMessage, senderId = "web") {
     }
   }
 
-  // 3️⃣ Tìm trong FAQ
+  // 2️⃣ Tìm trong FAQ
   if (reply === "Xin lỗi, tôi không hiểu." && faqData.length) {
     const questions = faqData.map(row => row[0] || "");
     const best = stringSimilarity.findBestMatch(userMessage, questions);
@@ -54,13 +53,15 @@ async function handleChat(userMessage, senderId = "web") {
     }
   }
 
-  // 4️⃣ Gọi AI nếu chưa tìm thấy
+  // 3️⃣ Gọi AI nếu chưa tìm thấy
   if (reply === "Xin lỗi, tôi không hiểu.") {
-    reply = await callGeminiWithSheet(userMessage, faqData.length ? faqData : []);
+    // Kết hợp cả FAQ + LearnedFAQ làm context
+    const contextData = [...faqData, ...learnedData];
+    reply = await callGeminiWithSheet(userMessage, contextData);
     reply = (reply || "Xin lỗi, tôi không hiểu.").toString();
     type = "AI";
 
-    // 5️⃣ Lưu vào LearnedFAQ nếu chưa tồn tại câu hỏi tương tự
+    // 4️⃣ Lưu vào LearnedFAQ nếu chưa có câu hỏi tương tự
     const learnedQuestions = learnedData.map(row => row[0] || "");
     const best = stringSimilarity.findBestMatch(userMessage, learnedQuestions);
     if (best.bestMatch.rating < 0.6) {
@@ -68,7 +69,7 @@ async function handleChat(userMessage, senderId = "web") {
     }
   }
 
-  // 6️⃣ Lưu lịch sử chat
+  // 5️⃣ Lưu lịch sử chat
   await appendSheetData(process.env.SHEET_ID, "ChatHistory", [
     new Date().toISOString(),
     senderId,
@@ -79,6 +80,7 @@ async function handleChat(userMessage, senderId = "web") {
 
   return reply;
 }
+
 // ======= Webhook xác minh Facebook =======
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
