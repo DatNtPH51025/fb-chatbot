@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
-const { getSheetData, appendSheetData } = require("./googleSheets");
+const { getSheetData, appendSheetData, callGeminiWithSheet } = require("./googleSheets");
 
 const app = express();
 app.use(bodyParser.json());
