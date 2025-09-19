@@ -52,25 +52,15 @@ app.post("/webhook", async (req, res) => {
 
           console.log("📩 USER_MESSAGE:", userMessage);
 
-          // 1. Kiểm tra Google Sheets
-          let reply = "Xin lỗi, tôi không hiểu.";
+          // Lấy toàn bộ dữ liệu trong sheet
           const values = await getSheetData(SHEET_ID, SHEET_NAME);
 
-          if (values) {
-            const found = values.find(
-              row => row[0]?.toLowerCase() === userMessage.toLowerCase()
-            );
-            if (found) {
-              reply = found[1];
-            } else {
-              // 2. Nếu không có → fallback sang AI
-              reply = await callGemini(userMessage);
-            }
-          }
+          // Gọi AI với dữ liệu từ sheet
+          const reply = await callGeminiWithSheet(userMessage, values || []);
 
           console.log("🤖 BOT_REPLY:", reply);
 
-          // 3. Lưu lịch sử chat vào ChatHistory
+          // Lưu lịch sử chat
           await appendSheetData(SHEET_ID, "ChatHistory", [
             new Date().toISOString(),
             senderId,
@@ -78,7 +68,7 @@ app.post("/webhook", async (req, res) => {
             reply,
           ]);
 
-          // 4. Gửi trả lời về Messenger
+          // Gửi trả lời về Messenger
           await axios.post(
             `https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
             {
@@ -98,6 +88,7 @@ app.post("/webhook", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
 
 app.listen(process.env.PORT, () => {
   console.log(`🚀 Server chạy ở cổng ${process.env.PORT}`);

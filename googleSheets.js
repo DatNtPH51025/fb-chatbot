@@ -42,5 +42,35 @@ async function appendSheetData(sheetId, sheetName, row) {
         console.error("❌ Lỗi ghi Google Sheets:", err);
     }
 }
+async function callGeminiWithSheet(userMessage, sheetData) {
+    try {
+        // Tạo knowledge base từ sheet
+        const faqText = sheetData
+            .map(row => `${row[0]}: ${row[1]}`)
+            .join("\n");
 
-module.exports = { getSheetData, appendSheetData };
+        const prompt = `
+Bạn là nhân viên tư vấn bán hàng. 
+Dưới đây là dữ liệu từ Google Sheets:
+
+${faqText}
+
+Người dùng hỏi: "${userMessage}"
+
+👉 Nhiệm vụ: Trả lời tự nhiên, lịch sự, giống như nhân viên tư vấn,
+và chỉ dựa trên dữ liệu trong Google Sheets. Nếu không tìm thấy thông tin, hãy nói "Xin lỗi, hiện tại tôi chưa có thông tin này".
+`;
+
+        const res = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            { contents: [{ parts: [{ text: prompt }] }] }
+        );
+
+        return res.data.candidates?.[0]?.content?.parts?.[0]?.text || "Xin lỗi, tôi không rõ.";
+    } catch (err) {
+        console.error("⚠️ Lỗi AI:", err.response?.data || err.message);
+        return "Xin lỗi, tôi không rõ.";
+    }
+}
+
+module.exports = { getSheetData, appendSheetData, callGeminiWithSheet };
