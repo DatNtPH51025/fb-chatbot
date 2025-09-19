@@ -1,50 +1,49 @@
-import express from "express";
-import bodyParser from "body-parser";
-import fetch from "node-fetch";
+require("dotenv").config();
+const express = require("express");
+const bodyParser = require("body-parser");
+const fetch = require("node-fetch");
+const { getSheetData } = require("./googleSheets");
 
 const app = express();
 app.use(bodyParser.json());
 
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-
-// Xác minh webhook
 app.get("/webhook", (req, res) => {
-  console.log("📩 ĐÃ NHẬN GỌI POST /webhook");
+  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+  if (mode && token === VERIFY_TOKEN) {
     res.status(200).send(challenge);
   } else {
     res.sendStatus(403);
   }
 });
 
-// Xử lý tin nhắn từ FB
 app.post("/webhook", async (req, res) => {
   try {
     if (req.body.object === "page") {
       for (const entry of req.body.entry) {
-        for (const event of entry.messaging) {
-          // Bỏ qua echo message do chính Page gửi
-          if (event.message?.is_echo) {
-            console.log("👉 Bỏ qua echo từ page");
-            continue;
+        const event = entry.messaging && entry.messaging[0];
+        if (event?.message?.text) {
+          const senderId = event.sender.id;
+          const userMessage = event.message.text.trim();
+
+          // Lấy dữ liệu từ Google Sheets
+          const values = await getSheetData(process.env.SHEET_ID, process.env.SHEET_NAME);
+          let reply = null;
+
+          if (values) {
+            const found = values.find(row => row[0]?.toLowerCase() === userMessage.toLowerCase());
+            if (found) {
+              reply = found[1];
+            }
           }
 
-          if (event.message?.text) {
-            const senderId = event.sender.id;
-            const userMessage = event.message.text;
-
-            console.log("📩 USER_MESSAGE:", userMessage);
-
-            // Gọi Gemini API
+          // Nếu không tìm thấy trong Google Sheets → gọi Gemini AI
+          if (!reply) {
             const geminiRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -54,28 +53,22 @@ app.post("/webhook", async (req, res) => {
               }
             );
             const data = await geminiRes.json();
-            const reply =
-              data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-              "Xin lỗi, tôi không hiểu.";
-
-            console.log("🤖 BOT_REPLY:", reply);
-
-            // Gửi trả lời về Messenger
-            await fetch(
-              `https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  recipient: { id: senderId },
-                  message: { text: reply }
-                })
-              }
-            );
+            reply = data?.candidates?.[0]?.content?.parts?.[0]?.text
+              || "Xin lỗi, tôi không hiểu.";
           }
+
+          // Gửi trả lời về Messenger
+          await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${process.env.PAGE_ACCESS_TOKEN}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              recipient: { id: senderId },
+              message: { text: reply },
+            }),
+          });
         }
       }
-      res.sendStatus(200); // trả về OK ngay để tránh retry
+      res.sendStatus(200);
     } else {
       res.sendStatus(404);
     }
@@ -85,4 +78,6 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-app.listen(8080, () => console.log("Server đang chạy trên cổng 8080"));
+app.listen(process.env.PORT, () => {
+  console.log(`🚀 Server chạy ở cổng ${process.env.PORT}`);
+});
