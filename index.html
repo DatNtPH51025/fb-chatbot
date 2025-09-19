@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Chatbot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- Nút tròn mở chat -->
+  <div id="chat-toggle">
+    💬
+  </div>
+
+  <!-- Hộp chat -->
+  <div id="chat-box" class="hidden">
+    <div id="chat-header">
+      Chatbot Hỗ Trợ
+      <span id="chat-close">✖</span>
+    </div>
+    <div id="chat-messages"></div>
+    <div id="chat-input">
+      <input type="text" id="userInput" placeholder="Nhập tin nhắn...">
+      <button id="sendBtn">Gửi</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="script.js"></script>
+</body>
+
+</html>

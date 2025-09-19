@@ -89,6 +89,26 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+app.post("/chat", async (req, res) => {
+  const userMessage = req.body.message;
+
+  // Lấy data từ Google Sheets
+  const values = await getSheetData(process.env.SHEET_ID, process.env.SHEET_NAME);
+  let reply = "Xin lỗi, tôi không hiểu.";
+
+  if (values) {
+    const found = values.find(row => row[0]?.toLowerCase() === userMessage.toLowerCase());
+    if (found) reply = found[1];
+  }
+
+  // Nếu không có trong Sheets thì gọi AI
+  if (reply === "Xin lỗi, tôi không hiểu.") {
+    const { callGeminiWithSheet } = require("./aiService");
+    reply = await callGeminiWithSheet(userMessage, values || []);
+  }
+
+  res.json({ reply });
+});
 
 app.listen(process.env.PORT, () => {
   console.log(`🚀 Server chạy ở cổng ${process.env.PORT}`);
