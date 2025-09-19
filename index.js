@@ -2,10 +2,18 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
+const cors = require("cors"); 
 const { getSheetData, appendSheetData, callGeminiWithSheet } = require("./googleSheets");
 
 const app = express();
 app.use(bodyParser.json());
+
+// ✅ bật CORS cho phép gọi từ web
+app.use(cors({
+  origin: "*",  // hoặc ["http://127.0.0.1:5500", "https://ten-mien-cua-ban.com"]
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
