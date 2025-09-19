@@ -1,44 +1,45 @@
 const { google } = require("googleapis");
 
-const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"], // full quyền đọc/ghi
-});
-
-// Đọc dữ liệu
+// ✅ Lấy dữ liệu key–value từ sheet
 async function getSheetData(sheetId, sheetName) {
     try {
-        const client = await auth.getClient();
-        const sheets = google.sheets({ version: "v4", auth: client });
+        const auth = new google.auth.GoogleAuth({
+            keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+            scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+        });
+
+        const sheets = google.sheets({ version: "v4", auth });
 
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,
-            range: `${sheetName}!A:B`, // A = key, B = value
+            range: `${sheetName}!A:B`,
         });
 
-        return response.data.values || [];
+        return response.data.values;
     } catch (err) {
-        console.error("❌ Lỗi đọc Google Sheets:", err.message);
+        console.error("❌ Lỗi đọc Google Sheets:", err);
         return null;
     }
 }
 
-// Ghi thêm dữ liệu
-async function appendSheetData(sheetId, sheetName, values) {
+// ✅ Append dữ liệu vào sheet (lưu lịch sử chat)
+async function appendSheetData(sheetId, sheetName, row) {
     try {
-        const client = await auth.getClient();
-        const sheets = google.sheets({ version: "v4", auth: client });
+        const auth = new google.auth.GoogleAuth({
+            keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+            scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+        });
+
+        const sheets = google.sheets({ version: "v4", auth });
 
         await sheets.spreadsheets.values.append({
             spreadsheetId: sheetId,
-            range: sheetName,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values: [values] },
+            range: `${sheetName}!A:D`,
+            valueInputOption: "RAW",
+            resource: { values: [row] },
         });
-
-        console.log("✅ Đã thêm dữ liệu vào Google Sheets:", values);
     } catch (err) {
-        console.error("❌ Lỗi ghi Google Sheets:", err.message);
+        console.error("❌ Lỗi ghi Google Sheets:", err);
     }
 }
 
