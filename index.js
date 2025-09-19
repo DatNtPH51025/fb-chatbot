@@ -1,12 +1,13 @@
 require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
-const fetch = require("node-fetch");
+const axios = require("axios"); // ✅ thay fetch bằng axios
 const { getSheetData } = require("./googleSheets");
 
 const app = express();
 app.use(bodyParser.json());
 
+// Xác minh webhook
 app.get("/webhook", (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
@@ -20,6 +21,7 @@ app.get("/webhook", (req, res) => {
   }
 });
 
+// Nhận & trả lời tin nhắn
 app.post("/webhook", async (req, res) => {
   try {
     if (req.body.object === "page") {
@@ -31,41 +33,24 @@ app.post("/webhook", async (req, res) => {
 
           // Lấy dữ liệu từ Google Sheets
           const values = await getSheetData(process.env.SHEET_ID, process.env.SHEET_NAME);
-          let reply = null;
+          let reply = "Xin lỗi, tôi không hiểu.";
 
           if (values) {
             const found = values.find(row => row[0]?.toLowerCase() === userMessage.toLowerCase());
-            if (found) {
-              reply = found[1];
-            }
+            if (found) reply = found[1];
           }
 
-          // Nếu không tìm thấy trong Google Sheets → gọi Gemini AI
-          if (!reply) {
-            const geminiRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: userMessage }] }]
-                })
-              }
-            );
-            const data = await geminiRes.json();
-            reply = data?.candidates?.[0]?.content?.parts?.[0]?.text
-              || "Xin lỗi, tôi không hiểu.";
-          }
-
-          // Gửi trả lời về Messenger
-          await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${process.env.PAGE_ACCESS_TOKEN}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          // Gửi trả lời về Messenger bằng axios
+          await axios.post(
+            `https://graph.facebook.com/v21.0/me/messages?access_token=${process.env.PAGE_ACCESS_TOKEN}`,
+            {
               recipient: { id: senderId },
               message: { text: reply },
-            }),
-          });
+            },
+            {
+              headers: { "Content-Type": "application/json" },
+            }
+          );
         }
       }
       res.sendStatus(200);
@@ -73,7 +58,7 @@ app.post("/webhook", async (req, res) => {
       res.sendStatus(404);
     }
   } catch (err) {
-    console.error("❌ Lỗi webhook:", err);
+    console.error("❌ Lỗi webhook:", err.response?.data || err.message);
     res.sendStatus(500);
   }
 });
