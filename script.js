@@ -32,7 +32,7 @@ async function sendMessage() {
 
     try {
         // Gọi API server Node.js chatbot
-        const res = await axios.post("http://localhost:8080/chat", {
+        const res = await axios.post("https://fb-chatbot-ibul.onrender.com/chat", {
             message: text
         });
 
